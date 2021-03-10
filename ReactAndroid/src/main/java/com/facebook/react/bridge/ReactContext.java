@@ -23,6 +23,7 @@ import com.facebook.react.bridge.queue.MessageQueueThread;
 import com.facebook.react.bridge.queue.ReactQueueConfiguration;
 import com.facebook.react.common.LifecycleState;
 import com.facebook.react.common.ReactConstants;
+import com.facebook.react.config.ReactFeatureFlags;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -183,7 +184,7 @@ public class ReactContext extends ContextWrapper {
 
   public void addLifecycleEventListener(final LifecycleEventListener listener) {
     mLifecycleEventListeners.add(listener);
-    if (hasActiveCatalystInstance()) {
+    if (hasActiveCatalystInstance() || isBridgeless()) {
       switch (mLifecycleState) {
         case BEFORE_CREATE:
         case BEFORE_RESUME:
@@ -295,6 +296,11 @@ public class ReactContext extends ContextWrapper {
     mDestroyed = true;
     if (mCatalystInstance != null) {
       mCatalystInstance.destroy();
+    }
+    if (ReactFeatureFlags.enableReactContextCleanupFix) {
+      mLifecycleEventListeners.clear();
+      mActivityEventListeners.clear();
+      mWindowFocusEventListeners.clear();
     }
   }
 
@@ -445,7 +451,7 @@ public class ReactContext extends ContextWrapper {
     return mCatalystInstance.getJavaScriptContextHolder();
   }
 
-  public JSIModule getJSIModule(JSIModuleType moduleType) {
+  public @Nullable JSIModule getJSIModule(JSIModuleType moduleType) {
     if (!hasActiveCatalystInstance()) {
       throw new IllegalStateException(
           "Unable to retrieve a JSIModule if CatalystInstance is not active.");
@@ -461,5 +467,17 @@ public class ReactContext extends ContextWrapper {
    */
   public @Nullable String getSourceURL() {
     return mCatalystInstance.getSourceURL();
+  }
+
+  /**
+   * Register a JS segment after loading it from cache or server, make sure mCatalystInstance is
+   * properly initialised and not null before calling.
+   *
+   * @param segmentId
+   * @param path
+   */
+  public void registerSegment(int segmentId, String path, Callback callback) {
+    Assertions.assertNotNull(mCatalystInstance).registerSegment(segmentId, path);
+    Assertions.assertNotNull(callback).invoke();
   }
 }
